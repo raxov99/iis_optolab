@@ -151,12 +151,13 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, T_len, read_V, plot=True, aint=False):
 
 def meas_AWG_SMU(N, DAQ, AWG, ch_AWG, SMU, ch_SMU, T_len, read_V):
     R_array = []
+    R_p = 9750
     for n in range(N):
         DAQ.set_conn(113)
         AWG.set_outp(ch_AWG, 1)
         AWG.trigger()
         AWG.set_outp(ch_AWG, 0)
         V_i, I_o, R, valid = meas_SMU_(DAQ, 111, SMU, ch_SMU, T_len, read_V, plot=False, aint=True)    
-        R_array.append(R[valid])
+        R_array.append(R[valid] - R_p)
     R = [np.mean(R_array[n]) for n in range(N)]
     return R

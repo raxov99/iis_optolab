@@ -55,7 +55,10 @@ class SourceMeasureUnit(Instrument):
     def __init__(self, addr):
         super().__init__(self, addr)
     
-    def set_wf(self, wave, SRAT, VOLT, ch=1, prot_pos=1e-5, prot_neg=1e-5):
+    def get_srat(self, ch):
+        return 1/float(self.query(f"sour{ch}:puls:widt?"))
+    
+    def set_wf(self, wave, SRAT, VOLT, ch=1, prot_pos=1e-3, prot_neg=1e-3, aint=False):
         wf = ''
         for value in wave:
             wf += f'{value*VOLT}, '
@@ -64,24 +67,36 @@ class SourceMeasureUnit(Instrument):
         tim = 1/SRAT
         self.write_multiple(
             [
-                f':sour{ch}:func:mode volt',
-                f':sour{ch}:volt:mode list',
-                f':sour{ch}:list:volt ' + wf,
-                f':sour{ch}:puls:widt ' + str(tim),
-                f':sens{ch}:func ""curr""',
-                f':sens{ch}:curr:rang:auto off',
-                f':sens{ch}:curr:rang ' + str(rang),
-                f':sens{ch}:curr:prot:pos ' + str(prot_pos),
-                f':sens{ch}:curr:prot:neg ' + str(prot_neg),
-                f':sens{ch}:curr:aper ' + str(tim/2),
-                f':trig{ch}:acq:del ' + str(tim/2),
-                f':trig{ch}:sour tim',
-                f':trig{ch}:tim ' + str(tim),
-                f':trig{ch}:coun ' + str(len(wf.split(',')))
+                f'sour{ch}:func:mode volt',
+                f'sour{ch}:volt:mode list',
+                f'sour{ch}:list:volt ' + wf,
+                f'sens{ch}:func ""curr""',
+                f'sens{ch}:curr:nplc ' + str(prot_pos),
+                f'sens{ch}:curr:prot ' + str(prot_neg),
+                f'trig{ch}:sour aint',
+                f'trig{ch}:coun ' + str(len(wf.split(',')))
+            ] if aint else [
+                f'sour{ch}:func:mode volt',
+                f'sour{ch}:volt:mode list',
+                f'sour{ch}:list:volt ' + wf,
+                f'sour{ch}:puls:widt ' + str(tim),
+                f'sens{ch}:func ""curr""',
+                f'sens{ch}:curr:rang:auto off',
+                f'sens{ch}:curr:rang ' + str(rang),
+                f'sens{ch}:curr:prot:pos ' + str(prot_pos),
+                f'sens{ch}:curr:prot:neg ' + str(prot_neg),
+                f'sens{ch}:curr:aper ' + str(tim/2),
+                f'trig{ch}:acq:del ' + str(tim/2),
+                f'trig{ch}:sour tim',
+                f'trig{ch}:tim ' + str(tim),
+                f'trig{ch}:coun ' + str(len(wf.split(',')))
             ]
         )
-        
-    def set_outp(self, out, ch=1):
+    
+    def get_outp(self, ch):
+        return int(self.query(f':outp{ch}?'))
+    
+    def set_outp(self, ch, out):
         self.write(f':outp{ch} {out}')
     
     def trigger(self, ch=1):
@@ -91,6 +106,9 @@ class SourceMeasureUnit(Instrument):
 class ArbitraryWaveformGenerator(Instrument):
     def __init__(self, addr):
         super().__init__(self, addr)
+    
+    def get_srat(self, ch):
+        return float(self.query(f'SOUR{ch}:FUNC:ARB:SRAT?'))
     
     def set_wf(self, wave, SRAT, VOLT, ch=1):
         wf = np.concatenate([np.array(wave), [0]])
@@ -118,7 +136,10 @@ class ArbitraryWaveformGenerator(Instrument):
             ]
         )
     
-    def set_outp(self, out, ch=1):
+    def get_outp(self, ch):
+        return int(self.query(f':outp{ch}?'))
+    
+    def set_outp(self, ch, out):
         self.write(f':outp{ch} {out}')
     
     def trigger(self):

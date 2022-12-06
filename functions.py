@@ -74,7 +74,7 @@ def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, T_len, read_V, VOLT, OSC, chs_OSC, plot=T
         plt.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
         plt.show()
     
-    return R, valid
+    return wf, R, valid
 
 def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, T_len, read_V, VOLT, OSC, chs_OSC, plot=True, aint=False):
     SRAT_SMU = SMU.get_srat(ch_SMU)
@@ -88,35 +88,7 @@ def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, T_len, read_V, VOLT, OSC, chs_OSC, plot=T
     trig_level = read_V*.9
     OSC.configure(SRAT_SMU*1e2, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
     
-    
-    DAQ.set_conn(ch_DAQ)
-    SMU.set_outp(ch_SMU, 1)
-    SMU.trigger()
-    SMU.set_outp(ch_SMU, 0)
-    
-    V_i = np.array(SMU.query(f':fetc:arr:volt? (@{ch_SMU})').strip().split(',')).astype('float')
-    I_o = np.array(SMU.query(f':fetc:arr:curr? (@{ch_SMU})').strip().split(',')).astype('float')
-    t = np.array(SMU.query(f':fetc:arr:time? (@{ch_SMU})').strip().split(',')).astype('float')
-    
-    R = V_i / I_o
-    valid = (V_i > .01) if aint else get_valid(V_i, T_len//5, read_V)
-    
-    if plot:
-        fig, ax0 = plt.subplots()
-        ax1 = ax0.twinx()
-        ax0.step(t, V_i, where='post')
-        ax0.set_xlim(t[0], t[-1])
-        ax0.set_xlabel("$t$ / s")
-        ax0.set_ylabel("$V$ / V")
-        ax1.semilogy(t[valid], R[valid], 'g.')
-        ax1.set_ylim([1, 1e9])
-        ax1.set_ylabel("$R$ / $\Omega$")
-        ax0.legend(["$V$"], loc="upper left")
-        ax1.legend(["$R$"], loc="upper right")
-        plt.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
-        plt.show()
-
-    return V_i, I_o, R, valid
+    return meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, T_len, read_V, plot=plot, aint=aint)
 
 
 def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, T_len, read_V, plot=True, aint=False):
@@ -147,7 +119,7 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, T_len, read_V, plot=True, aint=False):
         plt.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
         plt.show()
 
-    return V_i, I_o, R, valid
+    return t, V_i, I_o, R, valid
 
 def meas_AWG_SMU(N, DAQ, AWG, ch_AWG, SMU, ch_SMU, T_len, read_V):
     R_array = []
@@ -157,7 +129,7 @@ def meas_AWG_SMU(N, DAQ, AWG, ch_AWG, SMU, ch_SMU, T_len, read_V):
         AWG.set_outp(ch_AWG, 1)
         AWG.trigger()
         AWG.set_outp(ch_AWG, 0)
-        V_i, I_o, R, valid = meas_SMU_(DAQ, 111, SMU, ch_SMU, T_len, read_V, plot=False, aint=True)    
+        t, V_i, I_o, R, valid = meas_SMU_(DAQ, 111, SMU, ch_SMU, T_len, read_V, plot=False, aint=True)    
         R_array.append(R[valid] - R_p)
     R = [np.mean(R_array[n]) for n in range(N)]
     return R

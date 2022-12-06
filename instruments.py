@@ -58,40 +58,55 @@ class SourceMeasureUnit(Instrument):
     def get_srat(self, ch):
         return 1/float(self.query(f"sour{ch}:puls:widt?"))
     
-    def set_wf(self, wave, SRAT, VOLT, ch=1, prot_pos=1e-3, prot_neg=1e-3, aint=False):
+    def get_trig_source(self, ch):
+        return self.query(f"TRIG{ch}:TRAN:SOUR?")
+    
+    def set_trig_source(self, ch, source):
+        self.write(f"TRIG{ch}:SOUR {source}")
+    
+    def set_wf(self, wave, SRAT, ch=1, prot_pos=1e-3, prot_neg=1e-3, aint=False):
         wf = ''
         for value in wave:
-            wf += f'{value*VOLT}, '
+            wf += f'{value}, '
         wf += '0'
         rang = max(prot_pos, prot_neg)
-        tim = 1/SRAT
-        self.write_multiple(
-            [
-                f'sour{ch}:func:mode volt',
-                f'sour{ch}:volt:mode list',
-                f'sour{ch}:list:volt ' + wf,
-                f'sens{ch}:func ""curr""',
-                f'sens{ch}:curr:nplc ' + str(prot_pos),
-                f'sens{ch}:curr:prot ' + str(prot_neg),
-                f'trig{ch}:sour aint',
-                f'trig{ch}:coun ' + str(len(wf.split(',')))
-            ] if aint else [
-                f'sour{ch}:func:mode volt',
-                f'sour{ch}:volt:mode list',
-                f'sour{ch}:list:volt ' + wf,
-                f'sour{ch}:puls:widt ' + str(tim),
-                f'sens{ch}:func ""curr""',
-                f'sens{ch}:curr:rang:auto off',
-                f'sens{ch}:curr:rang ' + str(rang),
-                f'sens{ch}:curr:prot:pos ' + str(prot_pos),
-                f'sens{ch}:curr:prot:neg ' + str(prot_neg),
-                f'sens{ch}:curr:aper ' + str(tim/2),
-                f'trig{ch}:acq:del ' + str(tim/2),
-                f'trig{ch}:sour tim',
-                f'trig{ch}:tim ' + str(tim),
-                f'trig{ch}:coun ' + str(len(wf.split(',')))
-            ]
-        )
+        
+        if aint:
+            self.write_multiple(
+                [
+                    f'sour{ch}:func:mode volt',
+                    f'sour{ch}:volt:mode list',
+                    f'sour{ch}:list:volt ' + wf,
+                    f'sens{ch}:func ""curr""',
+                    f'sens{ch}:curr:rang:auto on',
+                    f'sens{ch}:curr:rang:auto:llim 1e-7',
+                    f'sens{ch}:curr:nplc ' + str(prot_pos),
+                    f'sens{ch}:curr:prot ' + str(prot_neg),
+                    f'trig{ch}:coun ' + str(len(wf.split(',')))
+                ]
+            )
+            self.set_trig_source(ch, "aint")
+        else:
+            tim = 1/SRAT
+            self.write_multiple(
+                [
+                    f'sour{ch}:func:mode volt',
+                    f'sour{ch}:volt:mode list',
+                    f'sour{ch}:list:volt ' + wf,
+                    f'sour{ch}:puls:widt ' + str(tim),
+                    f'sens{ch}:func ""curr""',
+                    f'sens{ch}:curr:rang:auto off',
+                    f'sens{ch}:curr:rang ' + str(rang),
+                    f'sens{ch}:curr:prot:pos ' + str(prot_pos),
+                    f'sens{ch}:curr:prot:neg ' + str(prot_neg),
+                    f'sens{ch}:curr:aper ' + str(tim/2),
+                    f'trig{ch}:acq:del ' + str(tim/2),
+                    f'trig{ch}:sour tim',
+                    f'trig{ch}:tim ' + str(tim),
+                    f'trig{ch}:coun ' + str(len(wf.split(',')))
+                ]
+            )
+            self.set_trig_source(ch, "tim")
     
     def get_outp(self, ch):
         return int(self.query(f':outp{ch}?'))
@@ -110,8 +125,9 @@ class ArbitraryWaveformGenerator(Instrument):
     def get_srat(self, ch):
         return float(self.query(f'SOUR{ch}:FUNC:ARB:SRAT?'))
     
-    def set_wf(self, wave, SRAT, VOLT, ch=1):
-        wf = np.concatenate([np.array(wave), [0]])
+    def set_wf(self, wave, SRAT, ch=1):
+        VOLT = max(wave)-min(wave)
+        wf = np.concatenate([np.array(wave)/VOLT, [0]])
         wf_bytes = wf.astype('single').tobytes()
         wf_len = str(len(wf_bytes))
         self.write_multiple(
@@ -127,7 +143,7 @@ class ArbitraryWaveformGenerator(Instrument):
                 f'SOUR{ch}:FUNC:ARB:SRAT {SRAT}',
                 f'SOUR{ch}:FUNC:ARB myArb',
                 f'OUTP{ch}:LOAD INF',
-                f'SOUR{ch}:VOLT {VOLT*(max(wave)-min(wave))}',
+                f'SOUR{ch}:VOLT {VOLT}',
                 #f'SOUR{ch}:VOLT:OFFS 0',
                 f'TRIG{ch}:SOUR BUS',
                 f'SOUR{ch}:BURS:MODE TRIG',

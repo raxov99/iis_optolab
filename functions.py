@@ -34,7 +34,6 @@ def get_valid(wf_i, T_len, W_len, read_V, tol=.05, wf_o=[]):
     if len(wf_o):
         temp = abs(np.gradient(np.convolve(wf_o, w, "same"))) < 1e-4*read_V
         valid = np.logical_and(valid, temp)
-    
     return valid
 
 def get_R_mean(R, valid, W_len):

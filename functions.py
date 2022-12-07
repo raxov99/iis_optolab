@@ -1,6 +1,33 @@
 import matplotlib.pyplot as plt
 from instruments import *
 
+def get_instruments():
+    instruments = {}
+    rm = pyvisa.ResourceManager()
+    lr = rm.list_resources()
+    for r in lr:
+        if "awg" in r:
+            instruments['AWG'] = ArbitraryWaveformGenerator(r)
+        elif "daq" in r:
+            instruments['DAQ'] = DataAcquisition(r)
+        elif "172.31.182.32" in r:
+            instruments['SMU'] = SourceMeasureUnit(r)
+        elif "osc" in r:
+            instruments['OSC'] = Oscilloscope(r)
+    return instruments
+
+def connect(instruments):
+    for key in instruments.keys():
+        instrument[key].connect()
+
+def disconnect(instruments):
+    for key in instruments.keys():
+        instrument[key].disconnect()
+        
+def reset(instruments):
+    for key in instruments.keys():
+        instrument[key].reset()
+
 def my_wf(V, n, T, W, read=False, read_V=.1):
     SRAT = 10/W if W else 1
     T_len = round(T*SRAT)
@@ -57,7 +84,7 @@ def get_R_mean(R, valid, W_len):
     return R_mean, a, b
 
 
-def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, plot=True, R_s=9750):
+def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, R_s=9750, plot=True, save=True):
     T = wf_dict['T']
     W = wf_dict['W']
     read_V = wf_dict['read_V']
@@ -88,6 +115,7 @@ def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, plot=True, R_s=975
     valid = get_valid(wf[0][1], T_len, W_len, read_V, wf_o=wf[1][1])
     t = wf[1][0]
     R_mean, a, b = get_R_mean(R, valid, W_len)
+    t_mean = (t[a]+t[b])/2
     
     if plot:
         fig, ax0 = plt.subplots()
@@ -109,16 +137,30 @@ def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, plot=True, R_s=975
         ax0.set_ylabel("$V$ / V")
         ax0.legend(["ch1"], loc="upper left")
         ax1.semilogy(t[valid], R[valid], ".g")
-        ax1.semilogy((t[a]+t[b])/2, R_mean, '.r')
+        ax1.semilogy(t_mean, R_mean, '.r')
         ax1.set_ylim([1, 1e9])
         ax1.set_ylabel("$R$ / $\Omega$")
         ax1.legend(["$R$", "$R\_mean$"], loc="upper right")
         plt.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
         plt.show()
-    
-    return wf, R, valid
+        
+    results = {
+        'wf' : [wf[i].tolist() for i in range(2)],
+        'R_valid' : R[valid].tolist(),
+        'valid' : valid.tolist(),
+        'R_mean' : R_mean.tolist(),
+        't_mean' : t_mean.tolist()
+    }
+    if save:
+        meas_dict = {
+            **wf_dict,
+            **results
+        }
+        with open("meas_AWG_dict.json", "w") as json_file:
+            json_file.write(json.dumps(meas_dict))
+    return results
 
-def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, OSC, chs_OSC, plot=True):
+def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, OSC, chs_OSC, plot=True, save=True):
     T = wf_dict['T']
     W = wf_dict['W']
     read_V = wf_dict['read_V']
@@ -129,11 +171,10 @@ def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, OSC, chs_OSC, plot=True):
     trig_source = chs_OSC[0]
     trig_level = read_V*.9
     OSC.configure(SRAT*1e2, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
-    
-    return meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=plot)
+    return meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=plot, save=save)
 
 
-def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True):
+def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True, save=True):
     DAQ.set_conn(ch_DAQ)
     SMU.set_outp(ch_SMU, 1)
     SMU.trigger()
@@ -157,6 +198,7 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True):
     else:
         valid = get_valid(V_i, T_len, W_len, read_V)
         R_mean, a, b = get_R_mean(R, valid, W_len)
+        t_mean = (t[a]+t[b])/2
     
     
     if plot:
@@ -168,15 +210,37 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True):
         ax0.set_ylabel("$V$ / V")
         ax1.semilogy(t[valid], R[valid], '.g')
         if not aint:
-            ax1.semilogy((t[a]+t[b])/2, R_mean, '.r')
+            ax1.semilogy(t_mean, R_mean, '.r')
         ax1.set_ylim([1, 1e9])
         ax1.set_ylabel("$R$ / $\Omega$")
         ax0.legend(["$V$"], loc="upper left")
         ax1.legend(["$R$", "$R\_mean$"], loc="upper right")
         plt.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
         plt.show()
-
-    return t, V_i, I_o, R, valid
+        
+    results = {
+        't' : t.tolist(),
+        'V_i' : V_i.tolist(),
+        'I_o' : I_o.tolist(),
+        'R_valid' : R[valid].tolist(),
+        'valid' : valid.tolist(),
+        'R_mean' : R_mean.tolist(),
+        't_mean' : t_mean.tolist()
+    } if not aint else {
+        't' : t.tolist(),
+        'V_i' : V_i.tolist(),
+        'I_o' : I_o.tolist(),
+        'R_valid' : R[valid].tolist(),
+        'valid' : valid.tolist()
+    }
+    if save:
+        meas_dict = {
+            **wf_dict,
+            **results
+        }
+        with open("meas_dict_SMU.json", "w") as json_file:
+            json_file.write(json.dumps(meas_dict))
+    return results
 
 def meas_AWG_SMU(N, DAQ, AWG, ch_AWG, SMU, ch_SMU, wf_dict_SMU, R_s = 9750, plot=True):
     R_array = []

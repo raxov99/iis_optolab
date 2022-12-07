@@ -37,14 +37,14 @@ def get_valid(wf_i, T_len, W_len, read_V, tol=.05, wf_o=[]):
     
     return valid
 
-def get_R_mean(R, valid, T_len):
+def get_R_mean(R, valid, W_len):
     valid_idxs = np.where(valid)[0]
     R_a_b = []
     R_i = [R[valid_idxs[0]]]
     start = valid_idxs[0]
     prev_idx = valid_idxs[0]
     for idx in valid_idxs[1:]:
-        if idx - prev_idx > T_len/10:
+        if idx - prev_idx > W_len:
             R_a_b.append((np.mean(R_i), start, prev_idx))
             R_i = [R[idx]]
             start = idx
@@ -88,7 +88,7 @@ def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, plot=True, R_s=975
     R = R_s*(wf[0][1]-wf[1][1])/wf[1][1]
     valid = get_valid(wf[0][1], T_len, W_len, read_V, wf_o=wf[1][1])
     t = wf[1][0]
-    R_mean, a, b = get_R_mean(R, valid, T_len)
+    R_mean, a, b = get_R_mean(R, valid, W_len)
     
     if plot:
         fig, ax0 = plt.subplots()
@@ -157,7 +157,7 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True):
         valid = (V_i > .01)
     else:
         valid = get_valid(V_i, T_len, W_len, read_V)
-        R_mean, a, b = get_R_mean(R, valid, T_len)
+        R_mean, a, b = get_R_mean(R, valid, W_len)
     
     
     if plot:

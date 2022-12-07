@@ -45,7 +45,8 @@ def my_wf(V, n, T, W, read=False, read_V=.1):
     wf += [0 for j in range(n_zeros)]
     return wf, SRAT
 
-def get_and_set_wf(inst, ch, wf_dict, aint=False):
+def get_and_set_wf(key, ch, wf_dict, aint=False):
+    inst = get_instruments()[key]
     wf, SRAT = my_wf(wf_dict['V'], wf_dict['n'], wf_dict['T'], wf_dict['W'], wf_dict['read'], wf_dict['read_V'])
     if aint:
         inst.set_wf(wf, SRAT, ch, aint=aint)
@@ -84,7 +85,12 @@ def get_R_mean(R, valid, W_len):
     return R_mean, a, b
 
 
-def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, R_s=9750, plot=True, save=True):
+def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=9750, plot=True, save=True):
+    instruments = get_instruments() 
+    DAQ = instruments['DAQ']
+    AWG = instruments['AWG']
+    OSC = instruments['OSC']
+    
     T = wf_dict['T']
     W = wf_dict['W']
     read_V = wf_dict['read_V']
@@ -160,7 +166,7 @@ def meas_AWG(DAQ, ch_DAQ, AWG, ch_AWG, wf_dict, OSC, chs_OSC, R_s=9750, plot=Tru
             json_file.write(json.dumps(meas_dict))
     return results
 
-def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, OSC, chs_OSC, plot=True, save=True):
+def meas_SMU(ch_DAQ, ch_SMU, wf_dict, chs_OSC, plot=True, save=True):
     T = wf_dict['T']
     W = wf_dict['W']
     read_V = wf_dict['read_V']
@@ -170,11 +176,16 @@ def meas_SMU(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, OSC, chs_OSC, plot=True, save=Tr
     scales = [read_V/5, read_V/5]
     trig_source = chs_OSC[0]
     trig_level = read_V*.9
+    OSC = get_instruments() ['OSC']
     OSC.configure(SRAT*1e2, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
     return meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=plot, save=save)
 
 
 def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True, save=True):
+    instruments = get_instruments() 
+    DAQ = instruments['DAQ']
+    SMU = instruments['SMU']
+    
     DAQ.set_conn(ch_DAQ)
     SMU.set_outp(ch_SMU, 1)
     SMU.trigger()
@@ -242,14 +253,19 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True, save=True):
             json_file.write(json.dumps(meas_dict))
     return results
 
-def meas_AWG_SMU(N, DAQ, AWG, ch_AWG, SMU, ch_SMU, wf_dict_SMU, R_s = 9750, plot=True):
+def meas_AWG_SMU(N, ch_AWG, ch_SMU, wf_dict_SMU, R_s = 9750, plot=True):
+    instruments = get_instruments() 
+    DAQ = instruments['DAQ']
+    AWG = instruments['AWG']
+    SMU = instruments['SMU']
+    
     R_array = []
     for n in range(N):
         DAQ.set_conn(113)
         AWG.set_outp(ch_AWG, 1)
         AWG.trigger()
         AWG.set_outp(ch_AWG, 0)
-        t, V_i, I_o, R, valid = meas_SMU_(DAQ, 111, SMU, ch_SMU, wf_dict_SMU, plot=False)    
+        t, V_i, I_o, R, valid = meas_SMU_(111, ch_SMU, wf_dict_SMU, plot=False)    
         R_array.append(R[valid] - R_s)
     R = [np.mean(R_array[n]) for n in range(N)]
     if plot:

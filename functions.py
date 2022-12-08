@@ -84,18 +84,19 @@ def get_R_mean(R, valid, W_len):
     return R_mean, a, b
 
 
-def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=9750, plot=True, save=True):
+def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=9750, R_min=5e3, plot=True, save=True):
     DAQ = instruments['DAQ']
     AWG = instruments['AWG']
     OSC = instruments['OSC']
     
     T = wf_dict['T']
     W = wf_dict['W']
+    n = wf_dict['n']
     read_V = wf_dict['read_V']
     SRAT = AWG.get_srat(ch_AWG)
-    t_scale = T*2
-    t_pos = T*8
-    scales = [read_V/5, read_V/5]
+    t_scale = T*sum(n)/8
+    t_pos = T*sum(n)/2
+    scales = [read_V/5, read_V*R_s/(R_s+R_min)/5]
     trig_source = chs_OSC[0]
     trig_level = read_V*.9
     OSC.configure(SRAT, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
@@ -140,9 +141,9 @@ def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=9750, plot=True, save=True):
         ax0.plot(wf[0][0], wf[0][1], "y")
         ax0.set_ylabel("$V$ / V")
         ax0.legend(["ch1"], loc="upper left")
-        ax1.semilogy(t[valid], R[valid], ".g")
-        ax1.semilogy(t_mean, R_mean, '.r')
-        ax1.set_ylim([1, 1e9])
+        ax1.plot(t[valid], R[valid], ".g")
+        ax1.plot(t_mean, R_mean, '.r')
+        #ax1.set_ylim([1, 1e9])
         ax1.set_ylabel("$R$ / $\Omega$")
         ax1.legend(["$R$", "$R\_mean$"], loc="upper right")
         plt.ticklabel_format(axis='x', style='sci', scilimits=(0,0))

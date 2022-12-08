@@ -259,7 +259,7 @@ class Oscilloscope(Instrument):
     
     def configure(self, SRAT, t_scale, t_pos, chs, scales, trig_source, trig_level):
         self.set_hdef_state('ON')
-        self.set_hdef_bwidth(5e8)
+        self.set_hdef_bwidth(1e5)
         self.set_time_scale(t_scale)
         self.set_time_pos(t_pos)
         self.set_srat(SRAT)

@@ -1,32 +1,31 @@
 import matplotlib.pyplot as plt
+import json
 from instruments import *
 
-def get_instruments():
-    instruments = {}
-    rm = pyvisa.ResourceManager()
-    lr = rm.list_resources()
-    for r in lr:
-        if "awg" in r:
-            instruments['AWG'] = ArbitraryWaveformGenerator(r)
-        elif "daq" in r:
-            instruments['DAQ'] = DataAcquisition(r)
-        elif "172.31.182.32" in r:
-            instruments['SMU'] = SourceMeasureUnit(r)
-        elif "osc" in r:
-            instruments['OSC'] = Oscilloscope(r)
-    return instruments
+instruments = {}
+rm = pyvisa.ResourceManager()
+lr = rm.list_resources()
+for r in lr:
+    if "awg" in r:
+        instruments['AWG'] = ArbitraryWaveformGenerator(r)
+    elif "daq" in r:
+        instruments['DAQ'] = DataAcquisition(r)
+    elif "172.31.182.32" in r:
+        instruments['SMU'] = SourceMeasureUnit(r)
+    elif "osc" in r:
+        instruments['OSC'] = Oscilloscope(r)
 
 def connect(instruments):
     for key in instruments.keys():
-        instrument[key].connect()
+        instruments[key].connect()
 
 def disconnect(instruments):
     for key in instruments.keys():
-        instrument[key].disconnect()
+        instruments[key].disconnect()
         
 def reset(instruments):
     for key in instruments.keys():
-        instrument[key].reset()
+        instruments[key].reset()
 
 def my_wf(V, n, T, W, read=False, read_V=.1):
     SRAT = 10/W if W else 1
@@ -46,7 +45,7 @@ def my_wf(V, n, T, W, read=False, read_V=.1):
     return wf, SRAT
 
 def get_and_set_wf(key, ch, wf_dict, aint=False):
-    inst = get_instruments()[key]
+    inst = instruments[key]
     wf, SRAT = my_wf(wf_dict['V'], wf_dict['n'], wf_dict['T'], wf_dict['W'], wf_dict['read'], wf_dict['read_V'])
     if aint:
         inst.set_wf(wf, SRAT, ch, aint=aint)
@@ -86,7 +85,6 @@ def get_R_mean(R, valid, W_len):
 
 
 def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=9750, plot=True, save=True):
-    instruments = get_instruments() 
     DAQ = instruments['DAQ']
     AWG = instruments['AWG']
     OSC = instruments['OSC']
@@ -162,7 +160,7 @@ def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=9750, plot=True, save=True):
             **wf_dict,
             **results
         }
-        with open("meas_AWG_dict.json", "w") as json_file:
+        with open("meas_dict_AWG.json", "w") as json_file:
             json_file.write(json.dumps(meas_dict))
     return results
 
@@ -170,19 +168,17 @@ def meas_SMU(ch_DAQ, ch_SMU, wf_dict, chs_OSC, plot=True, save=True):
     T = wf_dict['T']
     W = wf_dict['W']
     read_V = wf_dict['read_V']
-    SRAT = SMU.get_srat(ch_SMU)
+    SRAT = instruments['SMU'].get_srat(ch_SMU)
     t_scale = T*2
     t_pos = T*8
     scales = [read_V/5, read_V/5]
     trig_source = chs_OSC[0]
     trig_level = read_V*.9
-    OSC = get_instruments() ['OSC']
-    OSC.configure(SRAT*1e2, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
-    return meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=plot, save=save)
+    instruments['OSC'].configure(SRAT*1e2, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
+    return meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=plot, save=save)
 
 
-def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True, save=True):
-    instruments = get_instruments() 
+def meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=True, save=True):
     DAQ = instruments['DAQ']
     SMU = instruments['SMU']
     
@@ -254,7 +250,6 @@ def meas_SMU_(DAQ, ch_DAQ, SMU, ch_SMU, wf_dict, plot=True, save=True):
     return results
 
 def meas_AWG_SMU(N, ch_AWG, ch_SMU, wf_dict_SMU, R_s = 9750, plot=True):
-    instruments = get_instruments() 
     DAQ = instruments['DAQ']
     AWG = instruments['AWG']
     SMU = instruments['SMU']
@@ -265,8 +260,8 @@ def meas_AWG_SMU(N, ch_AWG, ch_SMU, wf_dict_SMU, R_s = 9750, plot=True):
         AWG.set_outp(ch_AWG, 1)
         AWG.trigger()
         AWG.set_outp(ch_AWG, 0)
-        t, V_i, I_o, R, valid = meas_SMU_(111, ch_SMU, wf_dict_SMU, plot=False)    
-        R_array.append(R[valid] - R_s)
+        results = meas_SMU_(111, ch_SMU, wf_dict_SMU, plot=False)    
+        R_array.append(np.array(results['R_valid']) - R_s)
     R = [np.mean(R_array[n]) for n in range(N)]
     if plot:
         plt.plot(R, '.')

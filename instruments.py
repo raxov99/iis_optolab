@@ -101,7 +101,6 @@ class SourceMeasureUnit(Instrument):
                     f'sens{ch}:curr:prot:neg ' + str(prot_neg),
                     f'sens{ch}:curr:aper ' + str(tim/2),
                     f'trig{ch}:acq:del ' + str(tim/2),
-                    f'trig{ch}:sour tim',
                     f'trig{ch}:tim ' + str(tim),
                     f'trig{ch}:coun ' + str(len(wf.split(',')))
                 ]
@@ -114,7 +113,7 @@ class SourceMeasureUnit(Instrument):
     def set_outp(self, ch, out):
         self.write(f':outp{ch} {out}')
     
-    def trigger(self, ch=1):
+    def trigger(self, ch):
         self.write(f':init (@{ch})')
     
 

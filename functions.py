@@ -184,7 +184,7 @@ def meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=True, save=True):
     
     DAQ.set_conn(ch_DAQ)
     SMU.set_outp(ch_SMU, 1)
-    SMU.trigger()
+    SMU.trigger(ch_SMU)
     SMU.set_outp(ch_SMU, 0)
     
     V_i = np.array(SMU.query(f':fetc:arr:volt? (@{ch_SMU})').strip().split(',')).astype('float')

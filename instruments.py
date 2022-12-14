@@ -64,7 +64,7 @@ class SourceMeasureUnit(Instrument):
     def set_trig_source(self, ch, source):
         self.write(f"TRIG{ch}:SOUR {source}")
     
-    def set_wf(self, wave, SRAT, ch=1, prot_pos=1e-3, prot_neg=1e-3, aint=False):
+    def set_wf(self, wave, SRAT, ch, prot_pos=1e-3, prot_neg=1e-3, aint=False):
         wf = ''
         for value in wave:
             wf += f'{value}, '
@@ -124,7 +124,7 @@ class ArbitraryWaveformGenerator(Instrument):
     def get_srat(self, ch):
         return float(self.query(f'SOUR{ch}:FUNC:ARB:SRAT?'))
     
-    def set_wf(self, wave, SRAT, ch=1):
+    def set_wf(self, wave, SRAT, ch):
         VOLT = max(wave)-min(wave)
         wf = np.concatenate([np.array(wave)/VOLT, [0]])
         wf_bytes = wf.astype('single').tobytes()
@@ -271,7 +271,7 @@ class Oscilloscope(Instrument):
         self.set_trig_source(trig_source)
         self.set_trig_level(trig_level)
     
-    def get_wf(self, ch=1):
+    def get_wf(self, ch):
         self.write_multiple(
             [
                 f"EXPort:WAVeform:SOURce C{ch}W1",

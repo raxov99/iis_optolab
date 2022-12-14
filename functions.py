@@ -33,7 +33,7 @@ def my_wf(V, n, T, W, read=False, read_V=.1):
     T_len = round(T*SRAT)
     W_len = round(W*SRAT)
     if not len(V) == len(n):
-        raise RuntimeError("Inputs of my_wf have different lengths.")
+        raise RuntimeError("Inputs V and n of my_wf have different lengths.")
     for i in range(len(V)):
         if i == 0:
             n_read = T_len-W_len
@@ -45,24 +45,25 @@ def my_wf(V, n, T, W, read=False, read_V=.1):
     wf += [0 for j in range(n_zeros)]
     return wf, SRAT
 
-def get_and_set_wf(key, ch, wf_dict, aint=False):
+def get_and_set_wf(key, wf_dict, aint=False):
     inst = instruments[key]
     wf, SRAT = my_wf(wf_dict['V'], wf_dict['n'], wf_dict['T'], wf_dict['W'], wf_dict['read'], wf_dict['read_V'])
     if aint:
-        inst.set_wf(wf, SRAT, ch, aint=aint)
+        inst.set_wf(wf, SRAT, wf_dict['ch'], aint=aint)
     else:
-        inst.set_wf(wf, SRAT, ch)
+        inst.set_wf(wf, SRAT, wf_dict['ch'])
 
 def get_valid(wf_i, T_len, W_len, read_V, tol=.05, wf_o=[]):
+    thr = 1e-4*read_V
     a = np.zeros(W_len)
     b = np.ones(T_len//5)/(T_len//5)
     w = np.concatenate([a, b])
     temp = np.convolve(wf_i, w, "same")
     valid = np.logical_and(read_V * (1-tol) < temp, temp < read_V * (1+tol))
-    temp = abs(np.gradient(wf_i)) < 1e-4*read_V
+    temp = abs(np.gradient(wf_i)) < thr
     valid = np.logical_and(valid, temp)
     if len(wf_o):
-        temp = abs(np.gradient(np.convolve(wf_o, w, "same"))) < 1e-4*read_V
+        temp = abs(np.gradient(np.convolve(wf_o, w, "same"))) < thr
         valid = np.logical_and(valid, temp)
     return valid
 
@@ -102,7 +103,9 @@ def get_R_mean(t, V_i, read_V, R, valid, T_len, W_len, n):
     R_mean = np.array(R_mean)   
     return R_mean, a, b
 
-def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, save=True):
+def meas_AWG(ch_DAQ, wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, save=True):
+    ch_AWG = wf_dict['ch']
+    
     DAQ = instruments['DAQ']
     AWG = instruments['AWG']
     OSC = instruments['OSC']
@@ -111,6 +114,7 @@ def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, sa
     W = wf_dict['W']
     n = wf_dict['n']
     read_V = wf_dict['read_V']
+    read = wf_dict['read']
     SRAT = AWG.get_srat(ch_AWG)
     t_scale = T*sum(n)/4
     t_pos = T*sum(n)
@@ -125,15 +129,15 @@ def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, sa
     
     wf = []
     for ch_OSC in chs_OSC:
-        f = open(f"wf{ch_OSC}.csv", "w")
-        f.write(OSC.get_wf(ch_OSC))
-        f.close()
-        wf.append(np.transpose(np.loadtxt(f"wf{ch_OSC}.csv", delimiter=";")))
+        path = f"wf/{ch_OSC}.csv"
+        with open(path, "w") as f:
+            f.write(OSC.get_wf(ch_OSC))
+        wf.append(np.transpose(np.loadtxt(path, delimiter=";")))
     
     T_len = round(T*SRAT)
     W_len = round(W*SRAT)
     
-    if read_V > 0:
+    if read and read_V > 0:
         R = R_s*(wf[0][1]-wf[1][1])/wf[1][1]
         valid = get_valid(wf[0][1], T_len, W_len, read_V, wf_o=wf[1][1])
         t = wf[0][0]
@@ -148,7 +152,7 @@ def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, sa
         'valid' : valid.tolist(),
         'R_mean' : R_mean.tolist(),
         't_mean' : t_mean.tolist()
-    } if read_V > 0 else {
+    } if read else {
         'wf' : [wf[i].tolist() for i in range(2)]
     }
     
@@ -164,21 +168,22 @@ def meas_AWG(ch_DAQ, ch_AWG, wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, sa
         
     return results
 
-def meas_SMU(ch_DAQ, ch_SMU, wf_dict, chs_OSC, plot=True, save=True):
+def meas_SMU(ch_DAQ, wf_dict, chs_OSC, plot=True, save=True):
     T = wf_dict['T']
     W = wf_dict['W']
     n = wf_dict['n']
     read_V = wf_dict['read_V']
-    SRAT = instruments['SMU'].get_srat(ch_SMU)
+    SRAT = instruments['SMU'].get_srat(wf_dict['ch'])
     t_scale = T*sum(n)/4
     t_pos = T*sum(n)
     scales = [read_V/5, read_V/5]
     trig_source = chs_OSC[0]
     trig_level = read_V*.9
     instruments['OSC'].configure(SRAT, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
-    return meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=plot, save=save)
+    return meas_SMU_(ch_DAQ, wf_dict, plot=plot, save=save)
 
-def meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=True, save=True):
+def meas_SMU_(ch_DAQ, wf_dict, plot=True, save=True):
+    ch_SMU = wf_dict['ch']
     DAQ = instruments['DAQ']
     SMU = instruments['SMU']
     
@@ -195,12 +200,13 @@ def meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=True, save=True):
     W = wf_dict['W']
     n = wf_dict['n']
     read_V = wf_dict['read_V']
+    read = wf_dict['read']
     SRAT = SMU.get_srat(ch_SMU)
     T_len = round(T*SRAT)
     W_len = round(W*SRAT)
     
     aint = SMU.get_trig_source(ch_SMU) == 'AINT'
-    if read_V > 0:
+    if read:
         R = V_i / I_o
         if aint:
             valid = (V_i > .01)
@@ -218,13 +224,13 @@ def meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=True, save=True):
         'valid' : valid.tolist(),
         'R_mean' : R_mean.tolist(),
         't_mean' : t_mean.tolist()
-    } if read_V > 0 and not aint else {
+    } if read and not aint else {
         't' : t.tolist(),
         'V_i' : V_i.tolist(),
         'I_o' : I_o.tolist(),
         'R_valid' : R[valid].tolist(),
         'valid' : valid.tolist(),
-    } if read_V > 0 else {
+    } if read > 0 else {
         't' : t.tolist(),
         'V_i' : V_i.tolist(),
         'I_o' : I_o.tolist()
@@ -240,25 +246,65 @@ def meas_SMU_(ch_DAQ, ch_SMU, wf_dict, plot=True, save=True):
     
     return results
 
-def meas_AWG_SMU(N, ch_AWG, ch_SMU, wf_dict_SMU, R_s = 1e3, plot=True):
-    DAQ = instruments['DAQ']
-    AWG = instruments['AWG']
-    SMU = instruments['SMU']
+def meas_AWG_SMU(wf_dict_AWG_list, N, ch_DAQ_AWG, ch_DAQ_SMU, read_V, R_s = 1e3, plot=True, save=True):
+    if not len(N) == len(wf_dict_AWG_list):
+        raise RuntimeError("Inputs wf_dict_AWG_list and N of meas_AWG_SMU have different lengths.")
     
-    R_array = []
-    for n in range(N):
-        DAQ.set_conn(113)
-        AWG.set_outp(ch_AWG, 1)
-        AWG.trigger()
-        AWG.set_outp(ch_AWG, 0)
-        results = meas_SMU_(111, ch_SMU, wf_dict_SMU, plot=False)    
-        R_array.append(np.array(results['R_valid']) - R_s)
-    R = [np.mean(R_array[n]) for n in range(N)]
+    wf_dict_SMU = {
+        'V' : [0],
+        'n' : [0],
+        'T' : 1,
+        'W' : 0,
+        'read' : True,
+        'read_V' : read_V,
+        'ch' : 2
+    }
+    get_and_set_wf('SMU', wf_dict_SMU, aint=True)
+    
+    p = 0
+    P = []
+    R = []
+    P.append(p)
+    results = meas_SMU_(ch_DAQ_SMU, wf_dict_SMU, plot=False)
+    R.append(results['R_valid'][0] - R_s)
+    for i, wf_dict_AWG in enumerate(wf_dict_AWG_list):
+        get_and_set_wf('AWG', wf_dict_AWG)
+        ch_AWG = wf_dict_AWG['ch']
+
+        DAQ = instruments['DAQ']
+        AWG = instruments['AWG']
+        SMU = instruments['SMU']
+
+        for n in range(N[i]):
+            DAQ.set_conn(ch_DAQ_AWG)
+            AWG.set_outp(ch_AWG, 1)
+            AWG.trigger()
+            AWG.set_outp(ch_AWG, 0)
+            p -= wf_dict_AWG['n'][0]*int(np.sign(wf_dict_AWG['V'][0]))
+            P.append(p)
+            results = meas_SMU_(ch_DAQ_SMU, wf_dict_SMU, plot=False)
+            R.append(results['R_valid'][0] - R_s)
     if plot:
-        plt.plot(R, '.')
+        b = np.ceil(len(P)/2).astype(int)
+        plt.plot(P[:b], R[:b], '.-b')
+        plt.plot(P[b+1:], R[b+1:], '.-r')
+        plt.xlabel("signed pulse count")
         plt.ylabel("$R$ / $\Omega$")
         plt.show()
-    return R
+    results = {
+        'P' : P,
+        'R' : R
+    }
+    meas_dict = {
+        'V' : [wf_dict_AWG['V'][0] for wf_dict_AWG in wf_dict_AWG_list],
+        'n' : [wf_dict_AWG['n'][0] for wf_dict_AWG in wf_dict_AWG_list],
+        'N' : N,
+        'read_V' : read_V,
+        **results
+    }
+    if save:
+        save_meas(meas_dict, 'AWG_SMU')
+    return results
 
 def plot_results(results, key, aint=False):
     if key == 'AWG':
@@ -289,10 +335,9 @@ def plot_results(results, key, aint=False):
         ax0.set_xlim(t[0], t[-1])
         ax0.set_xlabel("$t$ / s")
         ax0.set_ylabel("$V$ / V")
-        ax1.semilogy(t[valid], results['R_valid'], '.g')
+        ax1.plot(t[valid], results['R_valid'], '.g')
         if not aint:
-            ax1.semilogy(results['t_mean'], results['R_mean'], '.r')
-        #ax1.set_ylim([1, 1e9])
+            ax1.plot(results['t_mean'], results['R_mean'], '.r')
         ax1.set_ylabel("$R$ / $\Omega$")
         ax0.legend(["$V$"], loc="upper left")
         ax1.legend(["$R$", "$R\_mean$"], loc="upper right")
@@ -300,6 +345,6 @@ def plot_results(results, key, aint=False):
         plt.show()
     
 def save_meas(meas_dict, key):
-    with open(f"meas_dict_{key}_{date.today()}.json", "w") as json_file:
+    with open(f"meas_dict/{key}_{date.today()}.json", "w") as json_file:
             json_file.write(json.dumps(meas_dict))
     

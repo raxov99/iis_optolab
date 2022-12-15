@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import json
+from scipy.optimize import curve_fit
 from instruments import *
 from datetime import date
 
@@ -11,7 +12,8 @@ for r in lr:
         instruments['AWG'] = ArbitraryWaveformGenerator(r)
     elif "daq" in r:
         instruments['DAQ'] = DataAcquisition(r)
-    elif "smu" in r:
+    #elif "smu" in r:
+    elif "172.31.182.32" in r:
         instruments['SMU'] = SourceMeasureUnit(r)
     elif "osc" in r:
         instruments['OSC'] = Oscilloscope(r)
@@ -246,19 +248,10 @@ def meas_SMU_(ch_DAQ, wf_dict, plot=True, save=True):
     
     return results
 
-def meas_AWG_SMU(wf_dict_AWG_list, N, ch_DAQ_AWG, ch_DAQ_SMU, read_V, R_s = 1e3, plot=True, save=True):
+def meas_AWG_SMU(wf_dict_AWG_list, N, ch_DAQ_AWG, ch_DAQ_SMU, wf_dict_SMU, R_s = 1e3, plot=True, save=True):
     if not len(N) == len(wf_dict_AWG_list):
         raise RuntimeError("Inputs wf_dict_AWG_list and N of meas_AWG_SMU have different lengths.")
     
-    wf_dict_SMU = {
-        'V' : [0],
-        'n' : [0],
-        'T' : 1,
-        'W' : 0,
-        'read' : True,
-        'read_V' : read_V,
-        'ch' : 2
-    }
     get_and_set_wf('SMU', wf_dict_SMU, aint=True)
     
     p = 0
@@ -285,9 +278,9 @@ def meas_AWG_SMU(wf_dict_AWG_list, N, ch_DAQ_AWG, ch_DAQ_SMU, read_V, R_s = 1e3,
             results = meas_SMU_(ch_DAQ_SMU, wf_dict_SMU, plot=False)
             R.append(results['R_valid'][0] - R_s)
     if plot:
-        b = np.ceil(len(P)/2).astype(int)
-        plt.plot(P[:b], R[:b], '.-b')
-        plt.plot(P[b+1:], R[b+1:], '.-r')
+        b = np.floor(len(P)/2).astype(int)
+        plt.plot(P[:b+1], R[:b+1], '.-b')
+        plt.plot(P[b:], R[b:], '.-r')
         plt.xlabel("signed pulse count")
         plt.ylabel("$R$ / $\Omega$")
         plt.show()
@@ -299,7 +292,7 @@ def meas_AWG_SMU(wf_dict_AWG_list, N, ch_DAQ_AWG, ch_DAQ_SMU, read_V, R_s = 1e3,
         'V' : [wf_dict_AWG['V'][0] for wf_dict_AWG in wf_dict_AWG_list],
         'n' : [wf_dict_AWG['n'][0] for wf_dict_AWG in wf_dict_AWG_list],
         'N' : N,
-        'read_V' : read_V,
+        **wf_dict_SMU,
         **results
     }
     if save:
@@ -347,4 +340,95 @@ def plot_results(results, key, aint=False):
 def save_meas(meas_dict, key):
     with open(f"meas_dict/{key}_{date.today()}.json", "w") as json_file:
             json_file.write(json.dumps(meas_dict))
+
+def get_params(N, P, R):
+    b = np.where(np.array(P) == N)[0][0]
+    x_s = P[:b+1]
+    x_r = P[b:]
+    y_s = 1/np.array(R[:101])
+    y_r = 1/np.array(R[100:])
+    A = min(y_s.min(), y_r.min())
+    y_s /= A
+    y_r /= A
+    y_s -= 1
+    y_r -= 1
+    B = max(y_s.max(), y_r.max())
+    y_s /= B
+    y_r /= B
+    plt.plot(y_s, x_s, '.b')
+    plt.plot(y_r, x_r, '.r')
+    popt_s, pcov_s = curve_fit(pulse_s, y_s, x_s, [1e-2, N])
+    popt_r, pcov_r = curve_fit(pulse_r, y_r, x_r, [1e-2, N])
+    plt.plot(y_s, pulse_s(y_s, *popt_s), '-b')
+    plt.plot(y_r, pulse_r(y_r, *popt_r), '-r')
+    plt.show()
+    params = {
+        'A' : A,
+        'B' : B,
+        'popt' : [popt_s, popt_r]
+    }
+    return params 
+
+def pulse_s(G, beta, N):
+    G_inf = 1/(1-np.exp(-beta*N))
+    return -np.log(1-G/G_inf)/beta
+
+def pulse_r(G, beta, N):
+    G_inf = 1-1/(1-np.exp(-beta*N))
+    return N + np.log(1-(1-G)/(1-G_inf))/beta
+
+def pulse_n(G_i, G_f, beta_s, N_s, beta_r, N_r):
+    if G_f > G_i:
+        return pulse_s(G_f, beta_s, N_s) - pulse_s(G_i, beta_s, N_s)
+    else:
+        return pulse_r(G_f, beta_r, N_r) - pulse_r(G_i, beta_r, N_r)
+
+def characterize(N):
+    n = N//2
+    wf_dict_AWG = {
+        'V' : [2.4, 2.5, -2.5, -2.6], # pulse voltages
+        'n' : [n, n, n, n],   # pulse repetitions
+        'T' : 2e-3,     # pulse period
+        'W' : 1e-4,     # pulse width
+        'read' : True,
+        'read_V' : .3,
+        'ch' : 1
+    }
+    get_and_set_wf('AWG', wf_dict_AWG)
+    for i in range(3):
+        results_AWG = meas_AWG(113, wf_dict_AWG, [1, 2], R_s=1e3, R_min=5e3, plot = False)
+    return np.concatenate([np.arange(N+1), np.arange(N-1, -1, -1)]), results_AWG['R_mean']
+    
+def read(params, ch_DAQ_AWG, ch_DAQ_SMU):
+    wf_dict_SMU = {
+        'V' : [0],
+        'n' : [0],
+        'T' : 1,
+        'W' : 0,
+        'read' : True,
+        'read_V' : .5,
+        'ch' : 1
+    }
+    results = meas_AWG_SMU([], [], ch_DAQ_AWG, ch_DAQ_SMU, wf_dict_SMU, R_s = 1e3, plot=False)
+    return (results['R'][0]**-1/params['A'] - 1)/params['B']
+
+def write(params, ch_DAQ_AWG, ch_DAQ_SMU, G):
+    n = pulse_n(read(params, ch_DAQ_AWG, ch_DAQ_SMU), G, *params['popt'][0], *params['popt'][1])
+    wf_dict_AWG = {
+        'V' : [2.4 if n>0 else -2.6], # pulse voltages
+        'n' : [round(abs(n))],   # pulse repetitions
+        'T' : 5e-3,     # pulse period
+        'W' : 1e-4,     # pulse width
+        'read' : False,
+        'read_V' : 0,
+        'ch' : 1
+    }
+    get_and_set_wf('AWG', wf_dict_AWG)
+    DAQ = instruments['DAQ']
+    AWG = instruments['AWG']
+    ch_AWG =  wf_dict_AWG['ch']
+    DAQ.set_conn(ch_DAQ_AWG)
+    AWG.set_outp(ch_AWG, 1)
+    AWG.trigger()
+    AWG.set_outp(ch_AWG, 0)
     

@@ -4,6 +4,8 @@ from scipy.optimize import curve_fit
 from instruments import *
 from datetime import date
 
+N = 100
+
 instruments = {}
 rm = pyvisa.ResourceManager()
 lr = rm.list_resources()
@@ -341,7 +343,7 @@ def save_meas(meas_dict, key):
     with open(f"meas_dict/{key}_{date.today()}.json", "w") as json_file:
             json_file.write(json.dumps(meas_dict))
 
-def get_params(N, P, R):
+def get_params(P, R):
     b = np.where(np.array(P) == N)[0][0]
     x_s = P[:b+1]
     x_r = P[b:]
@@ -357,45 +359,47 @@ def get_params(N, P, R):
     y_r /= B
     plt.plot(y_s, x_s, '.b')
     plt.plot(y_r, x_r, '.r')
-    popt_s, pcov_s = curve_fit(pulse_s, y_s, x_s, [1e-2, N])
-    popt_r, pcov_r = curve_fit(pulse_r, y_r, x_r, [1e-2, N])
+    popt_s, pcov_s = curve_fit(pulse_s, y_s, x_s, [1, 1e-2])
+    popt_r, pcov_r = curve_fit(pulse_r, y_r, x_r, [1, 1e-2])
     plt.plot(y_s, pulse_s(y_s, *popt_s), '-b')
     plt.plot(y_r, pulse_r(y_r, *popt_r), '-r')
     plt.show()
     params = {
         'A' : A,
         'B' : B,
-        'popt' : [popt_s, popt_r]
+        'popt' : {
+            's' : popt_s,
+            'r' : popt_r
+        }
     }
     return params 
 
-def pulse_s(G, beta, N):
-    G_inf = 1/(1-np.exp(-beta*N))
-    return -np.log(1-G/G_inf)/beta
+def pulse_s(G, alfa, beta):
+    G_inf = 1/(1-np.exp(-beta*N**alfa))
+    return (-np.log(1-G/G_inf)/beta)**(1/alfa)
 
-def pulse_r(G, beta, N):
-    G_inf = 1-1/(1-np.exp(-beta*N))
-    return N + np.log(1-(1-G)/(1-G_inf))/beta
+def pulse_r(G, alfa, beta):
+    G_inf = 1-1/(1-np.exp(-beta*N**alfa))
+    return N -(-np.log(1-(1-G)/(1-G_inf))/beta)**(1/alfa)
 
-def pulse_n(G_i, G_f, beta_s, N_s, beta_r, N_r):
+def pulse_n(G_i, G_f, popt):
     if G_f > G_i:
-        return pulse_s(G_f, beta_s, N_s) - pulse_s(G_i, beta_s, N_s)
+        return pulse_s(G_f, *popt['s']) - pulse_s(G_i, *popt['s'])
     else:
-        return pulse_r(G_f, beta_r, N_r) - pulse_r(G_i, beta_r, N_r)
+        return pulse_r(G_f, *popt['r']) - pulse_r(G_i, *popt['r'])
 
-def characterize(N):
-    n = N//2
+def characterize(n):
     wf_dict_AWG = {
-        'V' : [2.4, 2.5, -2.5, -2.6], # pulse voltages
-        'n' : [n, n, n, n],   # pulse repetitions
-        'T' : 2e-3,     # pulse period
+        'V' : [2.4, -2.6], # pulse voltages
+        'n' : [N, N],   # pulse repetitions
+        'T' : 1e-3,     # pulse period
         'W' : 1e-4,     # pulse width
         'read' : True,
-        'read_V' : .3,
+        'read_V' : .1,
         'ch' : 1
     }
     get_and_set_wf('AWG', wf_dict_AWG)
-    for i in range(3):
+    for i in range(n):
         results_AWG = meas_AWG(113, wf_dict_AWG, [1, 2], R_s=1e3, R_min=5e3, plot = False)
     return np.concatenate([np.arange(N+1), np.arange(N-1, -1, -1)]), results_AWG['R_mean']
     
@@ -406,18 +410,21 @@ def read(params, ch_DAQ_AWG, ch_DAQ_SMU):
         'T' : 1,
         'W' : 0,
         'read' : True,
-        'read_V' : .5,
+        'read_V' : .1,
         'ch' : 1
     }
     results = meas_AWG_SMU([], [], ch_DAQ_AWG, ch_DAQ_SMU, wf_dict_SMU, R_s = 1e3, plot=False)
     return (results['R'][0]**-1/params['A'] - 1)/params['B']
 
 def write(params, ch_DAQ_AWG, ch_DAQ_SMU, G):
-    n = pulse_n(read(params, ch_DAQ_AWG, ch_DAQ_SMU), G, *params['popt'][0], *params['popt'][1])
+    G_i = np.clip(read(params, ch_DAQ_AWG, ch_DAQ_SMU), 0, 1)
+    G_f = np.clip(G, 0, 1)
+    
+    n = pulse_n(G_i, G_f, params['popt'])
     wf_dict_AWG = {
         'V' : [2.4 if n>0 else -2.6], # pulse voltages
         'n' : [round(abs(n))],   # pulse repetitions
-        'T' : 5e-3,     # pulse period
+        'T' : 1e-3,     # pulse period
         'W' : 1e-4,     # pulse width
         'read' : False,
         'read_V' : 0,

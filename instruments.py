@@ -1,6 +1,20 @@
 import pyvisa
 import numpy as np
 
+
+def connect(instruments):
+    for key in instruments.keys():
+        instruments[key].connect()
+
+def disconnect(instruments):
+    for key in instruments.keys():
+        instruments[key].disconnect()
+        
+def reset(instruments):
+    for key in instruments.keys():
+        instruments[key].reset()
+
+        
 class Instrument:
     def __init__(self, simulation, address):
         self.address = address
@@ -12,7 +26,7 @@ class Instrument:
                 self.conn = pyvisa.ResourceManager().open_resource(self.address)
                 self.connected = True
             except:
-                pass
+                passdd
 
     def disconnect(self):
         if self.connected:
@@ -163,10 +177,15 @@ class ArbitraryWaveformGenerator(Instrument):
 
 class DataAcquisition(Instrument):
     def __init__(self, addr):
+        self.closed = [0, 0]
         super().__init__(self, addr)
         
     def set_conn(self, ch):
-        self.write(f"ROUT:CLOS:EXCL (@{ch})")
+        b = (ch // 10) % 10 - 1
+        c = ch % 10
+        if self.closed[b] != c:
+            self.write(f"ROUT:CLOS:EXCL (@{ch})")
+            self.closed[b] = c
         
 class Oscilloscope(Instrument):
     def __init__(self, addr):
@@ -287,3 +306,21 @@ class Oscilloscope(Instrument):
         return self.query("MMEM:DATA? 'C:\Data\DataExportWfm_analog.wfm.csv'")
     
     
+
+instruments = {}
+rm = pyvisa.ResourceManager()
+lr = rm.list_resources()
+
+for r in lr:
+    if "awg" in r:
+        instruments['AWG'] = ArbitraryWaveformGenerator(r)
+    elif "daq" in r:
+        instruments['DAQ'] = DataAcquisition(r)
+    elif "172.31.182.32" in r:
+    #elif "smu" in r:
+        instruments['SMU'] = SourceMeasureUnit(r)
+    elif "osc" in r:
+        instruments['OSC'] = Oscilloscope(r)
+
+ch_AWG, ch_SMU = 1, 1
+ch_DAQ_AWG, ch_DAQ_SMU = 113, 111

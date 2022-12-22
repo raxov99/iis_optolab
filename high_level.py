@@ -4,7 +4,58 @@ N = 100
 V_lim = [2.3, 2.6, -2.4, -2.9]
 ss = 1.2
 
+def pulse_s(G, alfa, beta):
+    """
+    Get set pulse number from conductance G.
+    """
+    G_inf = 1/(1-np.exp(-beta*N**alfa))
+    return (-np.log(1-G/G_inf)/beta)**(1/alfa)
+
+def pulse_r(G, alfa, beta):
+    """
+    Get reset pulse number from conductance G.
+    """
+    G_inf = 1-1/(1-np.exp(-beta*N**alfa))
+    return N -(-np.log(1-(1-G)/(1-G_inf))/beta)**(1/alfa)
+
+def pulse_n(G_c, G_n, popt):
+    """
+    Get delta pulse number from current and new conductance values.
+    """
+    G_i = np.clip(G_c, 0, 1)
+    G_f = np.clip(G_n, 0, 1)
+    if G_f > G_i:
+        return pulse_s(G_f, *popt['s']) - pulse_s(G_i, *popt['s'])
+    else:
+        return pulse_r(G_f, *popt['r']) - pulse_r(G_i, *popt['r'])
+
+def characterize(n):
+    """
+    Retrieves pulses / resistance characteristic with AWG - OSC.
+    """
+    V = [*np.linspace(V_lim[0], V_lim[1], N), *np.linspace(V_lim[2], V_lim[3], N)]
+    wf_dict_AWG = {
+        'V' : V, # pulse voltages
+        'n' : [1 for i in range(N*2)],   # pulse repetitions
+        'W' : [2e-4 for i in range(N*2)],     # pulse widths
+        'T' : 2e-3,     # pulse period
+        'read' : True,
+        'read_V' : read_V
+    }
+    get_and_set_wf('AWG', wf_dict_AWG, ch_AWG)
+    P = np.array([])
+    P_i  = np.concatenate([np.arange(N), np.arange(-1, -N-1, -1)])
+    R = []
+    for i in range(n):
+        P = np.concatenate([P, P_i])
+        results_AWG = meas_AWG(wf_dict_AWG, [1, 2], R_s=1e3, R_min=5e3, plot = False)
+        R.extend(results_AWG['R_mean'])
+    return P, np.array(R)
+
 def get_params(P, R, plot=True):
+    """
+    Retrieves set and reset functions' parameters from pulses / resistance characteristic returned by characterize.
+    """
     points_s = np.where(np.array(P) > 0)[0]
     points_r = np.where(np.array(P) < 0)[0]
     y_s = P[points_s]
@@ -46,44 +97,10 @@ def get_params(P, R, plot=True):
     }
     return params 
 
-def pulse_s(G, alfa, beta):
-    G_inf = 1/(1-np.exp(-beta*N**alfa))
-    return (-np.log(1-G/G_inf)/beta)**(1/alfa)
-
-def pulse_r(G, alfa, beta):
-    G_inf = 1-1/(1-np.exp(-beta*N**alfa))
-    return N -(-np.log(1-(1-G)/(1-G_inf))/beta)**(1/alfa)
-
-def pulse_n(G_c, G_n, popt):
-    G_i = np.clip(G_c, 0, 1)
-    G_f = np.clip(G_n, 0, 1)
-    if G_f > G_i:
-        return pulse_s(G_f, *popt['s']) - pulse_s(G_i, *popt['s'])
-    else:
-        return pulse_r(G_f, *popt['r']) - pulse_r(G_i, *popt['r'])
-
-def characterize(n):
-    V = [*np.linspace(V_lim[0], V_lim[1], N), *np.linspace(V_lim[2], V_lim[3], N)]
-    wf_dict_AWG = {
-        'V' : V, # pulse voltages
-        'n' : [1 for i in range(N*2)],   # pulse repetitions
-        'W' : [2e-4 for i in range(N*2)],     # pulse widths
-        'T' : 2e-3,     # pulse period
-        'read' : True,
-        'read_V' : read_V
-    }
-    get_and_set_wf('AWG', wf_dict_AWG, ch_AWG)
-    P = np.array([])
-    P_i  = np.concatenate([np.arange(N), np.arange(-1, -N-1, -1)])
-    R = []
-    for i in range(n):
-        P = np.concatenate([P, P_i])
-        results_AWG = meas_AWG(wf_dict_AWG, [1, 2], R_s=1e3, R_min=5e3, plot = False)
-        R.extend(results_AWG['R_mean'])
-    return P, np.array(R)
-
-
 def read(params):
+    """
+    Reads conductance value with AWG - OSC.
+    """
     wf_dict = {
         'V' : [0], # pulse voltages
         'n' : [0],   # pulse repetitions
@@ -98,6 +115,9 @@ def read(params):
 
 
 def read_(params):
+    """
+    Reads conductance value with SMU.
+    """
     wf_dict = {
         'V' : [0],
         'n' : [0],
@@ -110,6 +130,9 @@ def read_(params):
     return (results['R'][0]**-1/params['A'] - 1)/params['B'] * ss - (ss-1)/2
 
 def write(params, G):
+    """
+    Writes conductance value G with AWG.
+    """
     G_i = np.clip(read(params), 0, 1)
     G_f = np.clip(G, 0, 1)
     n = pulse_n(G_i, G_f, params['popt'])

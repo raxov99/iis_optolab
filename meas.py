@@ -8,6 +8,9 @@ from datetime import datetime
 read_V = .1
 
 def my_wf(V, n, W, T, read, read_V):
+    """
+    Generates a custom waveform.
+    """
     SRAT = 10/np.array(W).min() if np.array(W).min() > 0 else 1
     W_len = np.round(np.array(W)*SRAT).astype(int)
     T_len = round(T*SRAT)
@@ -25,6 +28,9 @@ def my_wf(V, n, W, T, read, read_V):
     return wf, SRAT
 
 def get_and_set_wf(key, wf_dict, ch, aint=False):
+    """
+    Generates a custom waveform from the wf_dict and sets it con channel ch of the instrument key.
+    """
     inst = instruments[key]
     wf, SRAT = my_wf(wf_dict['V'], wf_dict['n'], wf_dict['W'], wf_dict['T'], wf_dict['read'], wf_dict['read_V'])
     if aint:
@@ -33,6 +39,11 @@ def get_and_set_wf(key, wf_dict, ch, aint=False):
         inst.set_wf(wf, SRAT, ch)
 
 def get_valid(wf_i, T_len, W_len, read_V, tol=.05, wf_o=[]):
+    """
+    Gets the valid indexes of the calculated resistance values.
+    Valid is when the input voltage is stabilized within (read_V*(1-tol), read_V*(1+tol)).
+    If the output waveform is present as input, the additional condition is that is also has to have stabilized, i.e. the absolute value of it's derivative is below thr.
+    """
     thr = 1e-4*read_V
     a = np.zeros(W_len)
     b = np.ones(T_len//5)/(T_len//5)
@@ -47,6 +58,11 @@ def get_valid(wf_i, T_len, W_len, read_V, tol=.05, wf_o=[]):
     return valid
 
 def get_R_mean_(R, valid, W_len):
+    """
+    Gets the mean resistance value for each read window.
+    Period independent version.
+    Doesn't always give back the same number of resistance values as the number of read windows.
+    """
     valid_idxs = np.where(valid)[0]
     R_a_b = []
     R_i = [R[valid_idxs[0]]]
@@ -67,6 +83,11 @@ def get_R_mean_(R, valid, W_len):
     return R_mean, a, b
 
 def get_R_mean(t, V_i, read_V, R, valid, T_len, W_len, n):
+    """
+    Gets the mean resistance value for each read window.
+    Period dependent version.
+    Always gives back the same number of resistance values as the number of read windows.
+    """
     start = np.where(V_i > read_V*.9)[0][0]
     #start = np.argmin(abs(t))
     a = np.arange(start, start+T_len*n, T_len)
@@ -83,6 +104,10 @@ def get_R_mean(t, V_i, read_V, R, valid, T_len, W_len, n):
     return R_mean, a, b
 
 def meas_AWG(wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, save=False):
+    """
+    AWG - OSC measuring function.
+    Sets the oscilloscope channels depending on the period and read voltage values, retrieves the waveforms, and calculates the resistance depending on R_s.
+    """
     DAQ = instruments['DAQ']
     AWG = instruments['AWG']
     OSC = instruments['OSC']
@@ -150,6 +175,10 @@ def meas_AWG(wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, save=False):
     return results
 
 def meas_SMU(wf_dict, chs_OSC, plot=True, save=False):
+    """
+    SMU - OSC measuring function.
+    Sets the oscilloscope channels depending on the period and read voltage values, and calls meas_SMU_.
+    """
     T = wf_dict['T']
     W = wf_dict['W']
     n = wf_dict['n']
@@ -164,6 +193,10 @@ def meas_SMU(wf_dict, chs_OSC, plot=True, save=False):
     return meas_SMU_(wf_dict, plot=plot, save=save)
 
 def meas_SMU_(wf_dict, plot=True, save=False):
+    """
+    SMU measuring function.
+    Calculates the resistance from the measured input voltage and output current values.
+    """
     DAQ = instruments['DAQ']
     SMU = instruments['SMU']
     
@@ -227,6 +260,10 @@ def meas_SMU_(wf_dict, plot=True, save=False):
     return results
 
 def meas_AWG_SMU(wf_dict_AWG_list, N, wf_dict_SMU, R_s = 1e3, plot=True, save=False):
+    """
+    AWG - SMU measuring function.
+    AWG pulses, SMU readout with aint as trigger source.
+    """
     if not len(N) == len(wf_dict_AWG_list):
         raise RuntimeError("Inputs wf_dict_AWG_list and N of meas_AWG_SMU have different lengths.")
     
@@ -277,6 +314,9 @@ def meas_AWG_SMU(wf_dict_AWG_list, N, wf_dict_SMU, R_s = 1e3, plot=True, save=Fa
     return results
 
 def plot_results(results, key, aint=False):
+    """
+    Plots results from AWG - OSC and SMU measurement functions.
+    """
     if key == 'AWG':
         wf = results['wf']
         fig, ax0 = plt.subplots()
@@ -315,6 +355,9 @@ def plot_results(results, key, aint=False):
         plt.show()
     
 def save_meas(meas_dict, key):
+    """
+    Saves measurement dictionary in JSOn format.
+    """
     now = datetime.now()
     date= now.strftime("%Y%m%d")
     time= now.strftime("%H%M%S")

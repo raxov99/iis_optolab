@@ -100,9 +100,11 @@ def meas_AWG(wf_dict, chs_OSC, R_s=1e3, R_min=5e3, plot=True, save=False):
     trig_level = read_V*.9
     OSC.configure(SRAT, t_scale, t_pos, chs_OSC, scales, trig_source, trig_level)
     DAQ.set_conn(ch_DAQ_AWG)
-    AWG.set_outp(ch_AWG, 1)
+    AWG.set_outp(1, 1)
+    AWG.set_outp(2, 1)
     AWG.trigger()
-    AWG.set_outp(ch_AWG, 0)
+    AWG.set_outp(1, 0)
+    AWG.set_outp(2, 0)
     
     wf = []
     if 'wf' not in os.listdir():

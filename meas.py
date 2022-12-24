@@ -249,9 +249,15 @@ def meas_SMU_(wf_dict, plot=True, save=False):
         'I_o' : I_o.tolist()
     }
     if plot:
-        plot_results(results, 'SMU', aint=aint)
+        plot_results(results, 'SMU', aint=aint)   
+    inst_dict = {
+        'aint' : aint,
+        'prot_pos' : SMU.get_curr_prot(ch_SMU, 'pos'),
+        'prot_neg' : SMU.get_curr_prot(ch_SMU, 'neg')
+    }
     if save:
         meas_dict = {
+            **inst_dict,
             **wf_dict,
             **results
         }

@@ -12,7 +12,8 @@ def disconnect(instruments):
         
 def reset(instruments):
     for key in instruments.keys():
-        instruments[key].reset()
+        if instruments[key].connected:
+            instruments[key].reset()
 
         
 class Instrument:
@@ -26,7 +27,7 @@ class Instrument:
                 self.conn = pyvisa.ResourceManager().open_resource(self.address)
                 self.connected = True
             except:
-                passdd
+                pass
 
     def disconnect(self):
         if self.connected:
@@ -94,8 +95,8 @@ class SourceMeasureUnit(Instrument):
                     f'sens{ch}:func ""curr""',
                     f'sens{ch}:curr:rang:auto on',
                     f'sens{ch}:curr:rang:auto:llim 1e-7',
-                    f'sens{ch}:curr:nplc ' + str(prot_pos),
-                    f'sens{ch}:curr:prot ' + str(prot_neg),
+                    f'sens{ch}:curr:nplc 0.1',
+                    f'sens{ch}:curr:prot ' + str(rang),
                     f'trig{ch}:coun ' + str(len(wf.split(',')))
                 ]
             )
@@ -111,15 +112,21 @@ class SourceMeasureUnit(Instrument):
                     f'sens{ch}:func ""curr""',
                     f'sens{ch}:curr:rang:auto off',
                     f'sens{ch}:curr:rang ' + str(rang),
-                    f'sens{ch}:curr:prot:pos ' + str(prot_pos),
-                    f'sens{ch}:curr:prot:neg ' + str(prot_neg),
                     f'sens{ch}:curr:aper ' + str(tim/2),
                     f'trig{ch}:acq:del ' + str(tim/2),
                     f'trig{ch}:tim ' + str(tim),
                     f'trig{ch}:coun ' + str(len(wf.split(',')))
                 ]
             )
+            self.set_curr_prot(ch, 'pos', prot_pos)
+            self.set_curr_prot(ch, 'neg', prot_neg)
             self.set_trig_source(ch, "tim")
+    
+    def get_curr_prot(self, ch, pol):
+        return float(self.query(f'sens{ch}:curr:prot:{pol}?'))
+    
+    def set_curr_prot(self, ch, pol, prot):
+        self.write(f'sens{ch}:curr:prot:{pol} {prot}')
     
     def get_outp(self, ch):
         return int(self.query(f':outp{ch}?'))
@@ -316,8 +323,8 @@ for r in lr:
         instruments['AWG'] = ArbitraryWaveformGenerator(r)
     elif "daq" in r:
         instruments['DAQ'] = DataAcquisition(r)
-    elif "172.31.182.32" in r:
-    #elif "smu" in r:
+    #elif "172.31.182.32" in r:
+    elif "smu" in r:
         instruments['SMU'] = SourceMeasureUnit(r)
     elif "osc" in r:
         instruments['OSC'] = Oscilloscope(r)

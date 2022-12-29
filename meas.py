@@ -29,7 +29,7 @@ def my_wf(V, n, W, T, read, read_V):
 
 def get_and_set_wf(key, wf_dict, ch, aint=False):
     """
-    Generates a custom waveform from the wf_dict and sets it con channel ch of the instrument key.
+    Generates a custom waveform from the wf_dict and sets it on channel ch of the instrument key.
     """
     inst = instruments[key]
     wf, SRAT = my_wf(wf_dict['V'], wf_dict['n'], wf_dict['W'], wf_dict['T'], wf_dict['read'], wf_dict['read_V'])

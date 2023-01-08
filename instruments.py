@@ -288,9 +288,8 @@ class Oscilloscope(Instrument):
         self.set_time_scale(t_scale)
         self.set_time_pos(t_pos)
         self.set_srat(SRAT)
-        self.set_ch(1, 'ON')
-        self.set_ch(2, 'ON')
         for ch, scale in zip(chs, scales):
+            self.set_ch(ch, 'ON')
             self.set_ch_scale(ch, scale)
             self.set_ch_pos(ch, -2.5)
         self.set_trig_mode('NORM')
@@ -329,5 +328,5 @@ for r in lr:
     elif "osc" in r:
         instruments['OSC'] = Oscilloscope(r)
 
-ch_AWG, ch_SMU = 1, 1
+ch_AWG, ch_SMU = 1, 2
 ch_DAQ_AWG, ch_DAQ_SMU = 113, 111

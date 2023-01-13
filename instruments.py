@@ -17,7 +17,7 @@ def reset(instruments):
 
         
 class Instrument:
-    def __init__(self, simulation, address):
+    def __init__(self, address):
         self.address = address
         self.connected = False
 
@@ -68,7 +68,7 @@ class Instrument:
 
 class SourceMeasureUnit(Instrument):
     def __init__(self, addr):
-        super().__init__(self, addr)
+        super().__init__(addr)
     
     def get_srat(self, ch):
         return 1/float(self.query(f"sour{ch}:puls:widt?"))
@@ -140,7 +140,7 @@ class SourceMeasureUnit(Instrument):
 
 class ArbitraryWaveformGenerator(Instrument):
     def __init__(self, addr):
-        super().__init__(self, addr)
+        super().__init__(addr)
     
     def get_srat(self, ch):
         return float(self.query(f'SOUR{ch}:FUNC:ARB:SRAT?'))
@@ -184,8 +184,8 @@ class ArbitraryWaveformGenerator(Instrument):
 
 class DataAcquisition(Instrument):
     def __init__(self, addr):
+        super().__init__(addr)
         self.closed = [0, 0]
-        super().__init__(self, addr)
         
     def set_conn(self, ch):
         b = (ch // 10) % 10 - 1
@@ -196,7 +196,7 @@ class DataAcquisition(Instrument):
         
 class Oscilloscope(Instrument):
     def __init__(self, addr):
-        super().__init__(self, addr)
+        super().__init__(addr)
         
     def get_hdef_state(self):
         return self.query("HDEFinition:STATe?")
